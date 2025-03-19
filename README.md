@@ -1,25 +1,74 @@
 # Go Fiber Keycloak Auth
 
-## Perubahan API
+[![Go Report Card](https://goreportcard.com/badge/github.com/dckristiono/go-fiber-keycloak-auth)](https://goreportcard.com/report/github.com/dckristiono/go-fiber-keycloak-auth)
+[![GoDoc](https://godoc.org/github.com/dckristiono/go-fiber-keycloak-auth?status.svg)](https://godoc.org/github.com/dckristiono/go-fiber-keycloak-auth)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-Modul ini telah disederhanakan dengan menyediakan **satu middleware utama** untuk autentikasi dan otorisasi Keycloak:
+Modul autentikasi dan otorisasi Keycloak yang fleksibel untuk [GoFiber](https://gofiber.io/). Modul ini menyediakan cara sederhana dan kuat untuk mengintegrasikan Keycloak dengan aplikasi GoFiber.
 
-### Unified Auth Middleware
+## Fitur Utama
 
-```go
-// Contoh penggunaan Auth middleware
-app.Get("/user-info", auth.Auth(keycloakauth.AuthOptions{
-    Required: true,              // Wajib autentikasi
-    Roles: []string{"user"},     // Peran yang diperlukan
-    AttributeMappings: []string{ // Atribut yang perlu di-map
-        "preferred_username",
-        "email",
-        "attributes.organization",
-    },
-}), handler)
+- 🔒 **Validasi Token**: Memvalidasi JWT token dari Keycloak menggunakan endpoint JWKS
+- 🛡️ **Role-Based Access Control**: Melindungi route berdasarkan peran Keycloak (realm dan client roles)
+- 🧩 **Middleware Terpadu**: Satu middleware untuk semua kebutuhan autentikasi dan otorisasi
+- 🧪 **Testing-Friendly**: Didisain untuk memudahkan pengujian, termasuk mock clients
+- 🚀 **Performa Optimal**: Caching JWKS untuk meningkatkan performa
+- 🔄 **Attribute Mapping**: Memetakan atribut token Keycloak ke context Fiber
+- 📝 **Role-Based Attribute Mapping**: Memetakan atribut berbeda untuk peran yang berbeda
+
+## Instalasi
+
+```bash
+go get github.com/dckristiono/go-fiber-keycloak-auth
 ```
 
-Middleware `Auth()` adalah satu-satunya middleware terpadu yang dibutuhkan untuk semua kebutuhan autentikasi dan otorisasi.
+## Penggunaan Dasar
+
+```go
+package main
+
+import (
+    "github.com/gofiber/fiber/v2"
+    "github.com/dckristiono/go-fiber-keycloak-auth"
+)
+
+func main() {
+    app := fiber.New()
+    
+    // Konfigurasi Keycloak
+    keycloakConfig := keycloakauth.Config{
+        Realm:     "your-realm",
+        ServerURL: "https://your-keycloak-server/auth",
+        ClientID:  "your-client-id",
+        CacheJWKS: true,
+    }
+    
+    // Buat instance KeycloakAuth
+    auth := keycloakauth.New(keycloakConfig)
+    
+    // Route publik
+    app.Get("/", func(c *fiber.Ctx) error {
+        return c.SendString("Halaman Publik")
+    })
+    
+    // Route terproteksi
+    app.Get("/profile", auth.Auth(keycloakauth.AuthOptions{
+        Required: true,
+    }), func(c *fiber.Ctx) error {
+        user, _ := keycloakauth.GetUser(c)
+        return c.JSON(fiber.Map{
+            "message": "Profil Pengguna",
+            "username": user.PreferredUsername,
+        })
+    })
+    
+    app.Listen(":3000")
+}
+```
+
+## Unified Auth Middleware
+
+Modul ini menggunakan pendekatan API yang bersih dengan menyediakan satu middleware utama untuk semua kebutuhan autentikasi:
 
 ```go
 // Opsi konfigurasi Auth
@@ -50,7 +99,13 @@ app.Get("/public", func(c *fiber.Ctx) error {
 ```go
 app.Get("/profile", auth.Auth(keycloakauth.AuthOptions{
     Required: true,
-}), handler)
+}), func(c *fiber.Ctx) error {
+    user, _ := keycloakauth.GetUser(c)
+    return c.JSON(fiber.Map{
+        "message": "Profil Pengguna",
+        "username": user.PreferredUsername,
+    })
+})
 ```
 
 ### 3. Role-Based Authorization
@@ -58,14 +113,30 @@ app.Get("/profile", auth.Auth(keycloakauth.AuthOptions{
 app.Get("/admin", auth.Auth(keycloakauth.AuthOptions{
     Required: true,
     Roles: []string{"admin", "super-admin"},
-}), handler)
+}), func(c *fiber.Ctx) error {
+    user, _ := keycloakauth.GetUser(c)
+    return c.JSON(fiber.Map{
+        "message": "Halaman Admin",
+        "username": user.PreferredUsername,
+    })
+})
 ```
 
 ### 4. Autentikasi Opsional
 ```go
 app.Get("/dashboard", auth.Auth(keycloakauth.AuthOptions{
     Required: false,
-}), handler)
+}), func(c *fiber.Ctx) error {
+    if !keycloakauth.IsAuthenticated(c) {
+        return c.SendString("Dashboard Publik - Silakan login untuk fitur tambahan")
+    }
+    
+    user, _ := keycloakauth.GetUser(c)
+    return c.JSON(fiber.Map{
+        "message": "Dashboard Pengguna",
+        "username": user.PreferredUsername,
+    })
+})
 ```
 
 ### 5. Attribute Mapping
@@ -76,8 +147,16 @@ app.Get("/user-details", auth.Auth(keycloakauth.AuthOptions{
         "preferred_username",
         "email",
         "attributes.organization",
+        "attributes.jobs.name",
     },
-}), handler)
+}), func(c *fiber.Ctx) error {
+    return c.JSON(fiber.Map{
+        "username": c.Locals("preferred_username"),
+        "email": c.Locals("email"),
+        "organization": c.Locals("organization"),
+        "job": c.Locals("name"), // Last part of attributes.jobs.name
+    })
+})
 ```
 
 ### 6. Role-Based Attribute Mapping
@@ -91,6 +170,7 @@ app.Get("/role-attributes", auth.Auth(keycloakauth.AuthOptions{
                 "preferred_username",
                 "email",
                 "attributes.admin_level",
+                "attributes.permissions",
             },
         },
         {
@@ -102,16 +182,63 @@ app.Get("/role-attributes", auth.Auth(keycloakauth.AuthOptions{
             },
         },
     },
+}), func(c *fiber.Ctx) error {
+    matchedRoles := keycloakauth.GetMatchedRoles(c)
+    
+    response := fiber.Map{
+        "username": c.Locals("preferred_username"),
+        "matched_roles": matchedRoles,
+    }
+    
+    // Tambahkan atribut khusus role jika tersedia
+    if adminLevel := c.Locals("admin_level"); adminLevel != nil {
+        response["admin_level"] = adminLevel
+    }
+    
+    if subscription := c.Locals("subscription"); subscription != nil {
+        response["subscription"] = subscription
+    }
+    
+    return c.JSON(response)
+})
+```
+
+### 7. Kombinasi Semua Fitur
+```go
+app.Get("/complex", auth.Auth(keycloakauth.AuthOptions{
+    Required: false,              // Autentikasi opsional
+    Roles:    []string{"premium"}, // Cek role ini
+    AttributeMappings: []string{  // Attribute umum
+        "preferred_username",
+        "email",
+    },
+    RoleMappings: []keycloakauth.RoleAttributeMapping{ // Attribute khusus per role
+        {
+            Role: "admin",
+            AttributeMappings: []string{
+                "attributes.admin_level",
+            },
+        },
+        {
+            Role: "premium",
+            AttributeMappings: []string{
+                "attributes.subscription_level",
+            },
+        },
+    },
 }), handler)
 ```
 
 ## Helper Functions
 
-Fungsi helper tetap tersedia untuk mengakses informasi dari token:
+Modul ini menyediakan beberapa fungsi helper untuk mengakses informasi dari token:
 
 ```go
 // Get user information
 user, ok := keycloakauth.GetUser(c)
+if ok {
+    fmt.Println(user.PreferredUsername, user.Email)
+}
 
 // Check if user is authenticated
 if keycloakauth.IsAuthenticated(c) {
@@ -123,14 +250,62 @@ if keycloakauth.HasRequiredRoles(c) {
     // User has required roles
 }
 
-// Check specific roles
+// Check if user has a specific role
 if keycloakauth.HasRole(c, "admin") {
-    // User has admin role
+    // Admin-specific code
 }
 
-// Get attribute values
-organization, ok := keycloakauth.GetAttributeValue(c, "attributes.organization")
+// Check if user has a specific client role
+if keycloakauth.HasClientRole(c, "my-client", "manager") {
+    // Manager-specific code
+}
 
-// Get matched roles
+// Get a specific attribute value
+organization, ok := keycloakauth.GetAttributeValue(c, "attributes.organization")
+if ok {
+    fmt.Println("Organization:", organization)
+}
+
+// Get matched roles (for role-based attribute mapping)
 matchedRoles := keycloakauth.GetMatchedRoles(c)
 ```
+
+## Struktur Project
+
+Struktur project dirancang agar modular dan mudah diuji:
+
+```
+go-fiber-keycloak-auth/
+├── types.go                 # Definisi tipe data (Config, Claims, AuthOptions, dll)
+├── auth.go                  # Implementasi utama KeycloakAuth (validasi token)
+├── middleware.go            # Middleware Auth
+├── helpers.go               # Fungsi bantuan untuk handler routes
+│
+├── examples/                # Contoh aplikasi
+│   ├── basic/               # Contoh dasar
+│   ├── advanced/            # Contoh lanjutan (attribute mapping)
+│   └── unified/             # Contoh middleware unified Auth
+```
+
+## Pengujian
+
+Modul ini dilengkapi dengan test yang komprehensif. Untuk menjalankan semua test:
+
+```bash
+go test -v ./...
+```
+
+Untuk menjalankan test dengan code coverage:
+
+```bash
+go test -coverprofile=coverage.out ./...
+go tool cover -html=coverage.out
+```
+
+## Contoh
+
+Periksa folder [examples](./examples) untuk contoh penggunaan lengkap.
+
+## Lisensi
+
+Modul ini tersedia di bawah lisensi MIT. Lihat file [LICENSE](./LICENSE) untuk detail lengkap.

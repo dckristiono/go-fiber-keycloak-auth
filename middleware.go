@@ -11,7 +11,7 @@ func (k *KeycloakAuth) Auth(options AuthOptions) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		// Default: autentikasi diharuskan
 		required := true
-		if options.Required == false {
+		if !options.Required {
 			required = false
 		}
 
@@ -162,67 +162,5 @@ func (k *KeycloakAuth) Auth(options AuthOptions) fiber.Handler {
 	}
 }
 
-// Alias fungsi untuk backward compatibility - private, hanya digunakan secara internal
-
-// protect adalah alias private untuk Auth dengan opsi default (wajib)
-func (k *KeycloakAuth) protect() fiber.Handler {
-	return k.Auth(AuthOptions{
-		Required: true,
-	})
-}
-
-// protectWithRole adalah alias private untuk Auth dengan satu role
-func (k *KeycloakAuth) protectWithRole(role string) fiber.Handler {
-	return k.Auth(AuthOptions{
-		Required: true,
-		Roles:    []string{role},
-	})
-}
-
-// protectWithRoles adalah alias private untuk Auth dengan beberapa role
-func (k *KeycloakAuth) protectWithRoles(roles []string) fiber.Handler {
-	return k.Auth(AuthOptions{
-		Required: true,
-		Roles:    roles,
-	})
-}
-
-// optionalAuth adalah alias private untuk Auth dengan autentikasi opsional
-func (k *KeycloakAuth) optionalAuth() fiber.Handler {
-	return k.Auth(AuthOptions{
-		Required: false,
-	})
-}
-
-// optionalAuthWithRoles adalah alias private untuk Auth dengan autentikasi opsional dan role
-func (k *KeycloakAuth) optionalAuthWithRoles(roles []string) fiber.Handler {
-	return k.Auth(AuthOptions{
-		Required: false,
-		Roles:    roles,
-	})
-}
-
-// protectWithAttribute adalah alias private untuk Auth dengan attribute mapping
-func (k *KeycloakAuth) protectWithAttribute(attributeMappings []string) fiber.Handler {
-	return k.Auth(AuthOptions{
-		Required:          true,
-		AttributeMappings: attributeMappings,
-	})
-}
-
-// protectWithRolesAndAttributes adalah alias private untuk Auth dengan role dan attribute
-func (k *KeycloakAuth) protectWithRolesAndAttributes(roles []string, attributeMappings []string) fiber.Handler {
-	return k.Auth(AuthOptions{
-		Required:          true,
-		Roles:             roles,
-		AttributeMappings: attributeMappings,
-	})
-}
-
-// protectWithRoleBasedAttributes adalah alias private untuk Auth dengan role-based attribute mapping
-func (k *KeycloakAuth) protectWithRoleBasedAttributes(roleMappings []RoleAttributeMapping) fiber.Handler {
-	return k.Auth(AuthOptions{
-		Required:     true,
-		RoleMappings: roleMappings,
-	})
-}
+// Untuk backward compatibility, kita dapat mendaftarkan alias-alias ini sebagai fungsi publik
+// jika ada kebutuhan di masa depan. Untuk saat ini kita hapus karena tidak digunakan.
